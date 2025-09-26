@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  mention-bot:
+    build: .
+    container_name: telegram-mention-bot
+    restart: unless-stopped
+    environment:
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - SEARCH_INTERVAL_HOURS=${SEARCH_INTERVAL_HOURS:-24}
+      - SEARCH_TIME_HOUR=${SEARCH_TIME_HOUR:-9}
+      - MAX_MESSAGES_PER_CHAT=${MAX_MESSAGES_PER_CHAT:-100}
+      - MAX_MENTIONS_PER_DAY=${MAX_MENTIONS_PER_DAY:-50}
+      - DATA_FILE=/app/data/bot_data.json
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    networks:
+      - bot-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  bot-network:
+    driver: bridge

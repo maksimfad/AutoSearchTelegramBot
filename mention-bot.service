@@ -1,0 +1,30 @@
+[Unit]
+Description=Telegram Mention Bot
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=telegram-bot
+Group=telegram-bot
+WorkingDirectory=/path/to/your/bot/directory
+EnvironmentFile=/path/to/your/bot/directory/.env
+ExecStart=/usr/bin/python3 /path/to/your/bot/directory/run_bot.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/path/to/your/bot/directory
+ProtectHome=true
+
+# Resource limits
+LimitNOFILE=65536
+MemoryMax=256M
+
+[Install]
+WantedBy=multi-user.target
