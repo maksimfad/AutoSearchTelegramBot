@@ -15,6 +15,7 @@ A Telegram bot that searches for user mentions in subscribed channels and groups
 
 - `/start` - Welcome message and command overview
 - `/register <nickname>` - Register your nickname for monitoring
+- `/addchannel @username` - Add channel by username or chat ID
 - `/help` - Detailed usage instructions
 - `/listchats` - Show your monitored channels/groups
 - `/status` - Check your registration status
@@ -68,22 +69,59 @@ The bot will start and begin monitoring according to your schedule.
 ## How It Works
 
 1. **Registration**: Users register with `/register <nickname>` to set up monitoring
-2. **Adding Chats**: Users simply forward any message from channels/groups they want to monitor
-3. **Auto-Detection**: If you register directly in a group/channel, it's automatically added
-4. **Daily Search**: The bot searches all monitored chats daily at the configured time
-5. **Message Forwarding**: Found mentions are forwarded to users with source information
+2. **Adding Chats**: Users can add channels/groups in several ways:
+   - Forward any message from the channel/group to the bot
+   - Register directly in the group/channel (auto-added)
+   - Use `/addchannel @username` or `/addchannel -1001234567890`
+3. **Daily Search**: The bot searches all monitored chats daily at the configured time
+4. **Message Forwarding**: Found mentions are forwarded to users with source information
+
+**Important**: The bot can only monitor chats where it has been added as a member and has permission to read messages.
 
 ## Important Notes
 
-### Bot Permissions
+### Bot Permissions & Limitations
 
-For the bot to work effectively, it needs to be added to the channels/groups you want to monitor:
+**Important**: The bot **cannot** automatically access all channels you are subscribed to, because:
 
-1. Add the bot as an administrator in channels (to read message history)
-2. Add the bot as a member in groups
-3. Forward any message from the chat to the bot (or register directly in the chat)
+1. **Privacy**: Telegram doesn't allow bots to see users' subscription lists
+2. **API Limitations**: Bot API doesn't provide methods to get user's channels
+3. **Permissions**: Bot can only access chats where it's explicitly added
 
-**Note**: The bot needs to be able to read messages in the chats you want to monitor.
+**To monitor channels:**
+
+1. **Add the bot** to the channels/groups you want to monitor
+2. **Grant permissions** for the bot to read messages
+3. **Add the chats** using one of these methods:
+   - Forward a message from the chat
+   - Register directly in the chat
+   - Use `/addchannel @username` or `/addchannel -1001234567890`
+
+**Note**: Bot monitors your nickname/ID only in chats where you've explicitly added it.
+
+## Understanding Telegram Bot Limitations
+
+**This bot works differently than you might expect:**
+
+❌ **Cannot automatically monitor all your subscriptions** - Telegram doesn't allow bots to access users' channel lists for privacy reasons
+
+❌ **Cannot read your channel list** - Bot API doesn't provide this functionality
+
+✅ **Can monitor chats where it's explicitly added** - This is the only way it works
+
+✅ **Searches for your nickname/ID in those chats** - And forwards mentions to you
+
+### How to Use It Properly:
+
+1. **Choose channels you want monitored** (the ones that actually mention you)
+2. **Add the bot to those channels** as a member or admin
+3. **Tell the bot to monitor them** using forwarding, `/addchannel`, or registration
+4. **Bot searches daily** for your nickname/ID in those specific chats
+
+This is actually **more efficient** because:
+- You control exactly which chats are monitored
+- No unnecessary searching through hundreds of channels
+- Bot only looks in places where you're actually mentioned
 
 ### Limitations
 
@@ -124,15 +162,23 @@ The bot is designed to be extensible. Key areas for enhancement:
 ### Troubleshooting
 
 **Bot not finding mentions:**
-- Ensure the bot is added to the channels/groups
-- Check that you're using the correct nickname format
-- Verify the bot has permission to read messages
-- Make sure you've forwarded a message from the chat to add it to monitoring
+- ✅ Ensure the bot is added to the channels/groups you want to monitor
+- ✅ Check that you're using the correct nickname format in `/register`
+- ✅ Verify the bot has permission to read messages in those chats
+- ✅ Make sure you've added the chats using forwarding, `/addchannel`, or registration
+- ✅ Check `/listchats` to see if your channels are actually being monitored
 
 **Bot not adding forwarded chats:**
-- Check that the message was actually forwarded (not just copied)
-- Ensure the original message is from a channel or group
+- Check that the message was actually **forwarded** (not just copied)
+- Ensure the original message is from a **channel or group**
+- Make sure the bot is a **member** of that channel/group
 - Try forwarding again if the first attempt didn't work
+
+**Cannot add channel by username:**
+- Make sure the username is correct (e.g., @mychannel)
+- Ensure the bot is a member of that channel
+- Try using the chat ID instead: `/addchannel -1001234567890`
+- Check that the channel is public or the bot has access
 
 **Bot not responding:**
 - Check that the bot token is correct

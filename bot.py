@@ -55,6 +55,7 @@ class MentionBot:
         self.application.add_handler(CommandHandler("unregister", self.unregister_command))
         self.application.add_handler(CommandHandler("listchats", self.list_chats_command))
         self.application.add_handler(CommandHandler("help", self.help_command))
+        self.application.add_handler(CommandHandler("addchannel", self.add_channel_command))
 
         # Handler for forwarded messages
         self.application.add_handler(MessageHandler(filters.FORWARDED, self.handle_forwarded_message))
@@ -68,10 +69,13 @@ class MentionBot:
             "and forward them to you daily.\n\n"
             "📋 **How to use:**\n"
             "1. **Register:** Use /register <nickname> to set up monitoring\n"
-            "2. **Add chats:** Forward me any message from channels/groups you want to monitor\n"
-            "3. **Auto-monitoring:** If you register in a group/channel, it's automatically added!\n\n"
+            "2. **Add channels:** Forward me messages from channels where you're mentioned\n"
+            "3. **Bot monitors:** Only chats where you've explicitly added it\n\n"
+            "⚠️ **Note:** Bot cannot access your private channel list for privacy reasons.\n"
+            "💡 Add bot to channels you want monitored and forward a message to register them!\n\n"
             "📋 **Available Commands:**\n"
             "• /register <nickname> - Set up your nickname for monitoring\n"
+            "• /addchannel @username - Add channel by username\n"
             "• /listchats - Show your monitored channels/groups\n"
             "• /status - Check your registration status\n"
             "• /help - Show this help message\n"
@@ -87,19 +91,104 @@ class MentionBot:
             "1️⃣ **Register your nickname:**\n"
             "`/register @your_username` or `/register nickname123`\n\n"
             "2️⃣ **Add channels/groups to monitor:**\n"
-            "• Forward me any message from the channel/group\n"
-            "• Or register directly in the group/channel (auto-added)\n\n"
+            "• **Forward a message** from the channel/group\n"
+            "• **Register in the chat** - it gets auto-added\n"
+            "• **Add by username:** `/addchannel @channelname`\n"
+            "• **Add by chat ID:** `/addchannel -1001234567890`\n\n"
             "3️⃣ **That's it!** The bot will:\n"
-            "• Search your subscribed chats daily at 9:00 AM\n"
-            "• Forward any messages mentioning your nickname\n"
+            "• Search your monitored chats daily at 9:00 AM\n"
+            "• Forward any messages mentioning your nickname or ID\n"
             "• Include source information and context\n\n"
-            "📋 **Other commands:**\n"
+            "📋 **All commands:**\n"
+            "• /register <nickname> - Set up monitoring\n"
+            "• /addchannel <username/ID> - Add specific channel\n"
             "• /listchats - Show monitored channels/groups\n"
             "• /status - Check your registration info\n"
             "• /unregister - Stop monitoring\n\n"
-            "💡 **Pro tip:** You can forward messages from private channels too!"
+            "💡 **Note:** Bot can only monitor chats where it's a member!"
         )
         await update.message.reply_text(help_message, parse_mode='Markdown')
+
+    async def add_channel_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /addchannel command to add channels by username or ID"""
+        user = update.effective_user
+
+        if user.id not in self.user_data:
+            await update.message.reply_text(
+                "❌ You need to register first using /register <nickname>"
+            )
+            return
+
+        if len(context.args) < 1:
+            await update.message.reply_text(
+                "Please provide channel username or ID after /addchannel command.\n"
+                "Examples:\n"
+                "/addchannel @channelusername\n"
+                "/addchannel -1001234567890"
+            )
+            return
+
+        channel_input = context.args[0]
+
+        # Try to resolve channel by username or use as chat ID
+        try:
+            if channel_input.startswith('@'):
+                # It's a username, get chat by username
+                try:
+                    chat = await self.application.bot.get_chat(channel_input)
+                    chat_id = chat.id
+                    chat_title = chat.title
+                except Exception as e:
+                    await update.message.reply_text(
+                        f"❌ Cannot find channel '{channel_input}'. Make sure the username is correct and the bot is a member of the channel."
+                    )
+                    return
+            else:
+                # It's a chat ID
+                try:
+                    chat_id = int(channel_input)
+                    chat = await self.application.bot.get_chat(chat_id)
+                    chat_title = chat.title
+                except ValueError:
+                    await update.message.reply_text(
+                        "❌ Invalid channel ID. Please provide a numeric chat ID."
+                    )
+                    return
+                except Exception as e:
+                    await update.message.reply_text(
+                        f"❌ Cannot access chat. Make sure the bot is a member of the channel."
+                    )
+                    return
+
+            # Check if already subscribed
+            if chat_id in self.subscribed_chats.get(user.id, set()):
+                await update.message.reply_text(
+                    f"ℹ️ Channel '{chat_title}' is already in your monitoring list!"
+                )
+                return
+
+            # Add to subscriptions
+            if user.id not in self.subscribed_chats:
+                self.subscribed_chats[user.id] = set()
+            self.subscribed_chats[user.id].add(chat_id)
+
+            # Update user data
+            self.user_data[user.id]['subscribed_chats'] = list(self.subscribed_chats[user.id])
+
+            # Save data
+            self.save_data()
+
+            chat_type = "📢 Channel" if chat.type in ['channel', 'supergroup'] else "👥 Group"
+            await update.message.reply_text(
+                f"✅ {chat_type} '{chat_title}' added to your monitoring list!\n"
+                f"🔍 Bot will now search for your mentions in this chat daily."
+            )
+
+        except Exception as e:
+            logger.error(f"Error adding channel: {e}")
+            await update.message.reply_text(
+                "❌ Error adding channel. Please try again or contact support."
+            )
 
     async def register_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /register command"""
@@ -295,19 +384,25 @@ class MentionBot:
         subscribed_chats = set()
 
         try:
-            # Note: In a real implementation, getting all user's chats requires
-            # special bot permissions or user interaction. For now, we rely
-            # on users manually subscribing to chats using /subscribe command.
+            # Get current user's chats where bot is a member
+            # Note: This is a simplified approach. In reality, Telegram doesn't
+            # provide a direct way to get all user's subscriptions.
+            # We need to work with what we have:
 
-            # However, we can try to get some basic information about chats
-            # the user has interacted with recently
+            # 1. Chats where user registered (auto-added)
+            # 2. Chats from forwarded messages
+            # 3. Chats where user interacted with the bot
 
-            # This is a simplified approach - in production you'd need:
-            # 1. Bot to be admin in groups/channels
-            # 2. User to provide chat IDs
-            # 3. Or use Telegram Bot API's getChatMember to discover chats
+            # For now, we return the chats that user has manually added
+            # In a production bot, you might want to:
+            # - Ask user to forward messages from channels they want monitored
+            # - Use bot's chat member status to discover common chats
+            # - Provide a way for users to input channel usernames
 
-            logger.info(f"Getting subscriptions for user {user_id}")
+            if user_id in self.subscribed_chats:
+                subscribed_chats = self.subscribed_chats[user_id].copy()
+
+            logger.info(f"User {user_id} has {len(subscribed_chats)} subscribed chats")
 
         except Exception as e:
             logger.error(f"Error getting user subscriptions: {e}")
