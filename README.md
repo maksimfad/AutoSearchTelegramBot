@@ -15,9 +15,8 @@ A Telegram bot that searches for user mentions in subscribed channels and groups
 
 - `/start` - Welcome message and command overview
 - `/register <nickname>` - Register your nickname for monitoring
-- `/subscribe` - Add current chat to monitoring list (use in groups/channels)
-- `/unsubscribe` - Remove current chat from monitoring list
-- `/listchats` - Show your subscribed channels/groups
+- `/help` - Detailed usage instructions
+- `/listchats` - Show your monitored channels/groups
 - `/status` - Check your registration status
 - `/unregister` - Stop monitoring completely
 
@@ -69,9 +68,10 @@ The bot will start and begin monitoring according to your schedule.
 ## How It Works
 
 1. **Registration**: Users register with `/register <nickname>` to set up monitoring
-2. **Chat Subscription**: Users add channels/groups using `/subscribe` command in those chats
-3. **Daily Search**: The bot searches all subscribed chats daily at the configured time
-4. **Message Forwarding**: Found mentions are forwarded to users with source information
+2. **Adding Chats**: Users simply forward any message from channels/groups they want to monitor
+3. **Auto-Detection**: If you register directly in a group/channel, it's automatically added
+4. **Daily Search**: The bot searches all monitored chats daily at the configured time
+5. **Message Forwarding**: Found mentions are forwarded to users with source information
 
 ## Important Notes
 
@@ -79,9 +79,11 @@ The bot will start and begin monitoring according to your schedule.
 
 For the bot to work effectively, it needs to be added to the channels/groups you want to monitor:
 
-1. Add the bot as an administrator in channels
+1. Add the bot as an administrator in channels (to read message history)
 2. Add the bot as a member in groups
-3. Use `/subscribe` command in each chat you want to monitor
+3. Forward any message from the chat to the bot (or register directly in the chat)
+
+**Note**: The bot needs to be able to read messages in the chats you want to monitor.
 
 ### Limitations
 
@@ -125,6 +127,12 @@ The bot is designed to be extensible. Key areas for enhancement:
 - Ensure the bot is added to the channels/groups
 - Check that you're using the correct nickname format
 - Verify the bot has permission to read messages
+- Make sure you've forwarded a message from the chat to add it to monitoring
+
+**Bot not adding forwarded chats:**
+- Check that the message was actually forwarded (not just copied)
+- Ensure the original message is from a channel or group
+- Try forwarding again if the first attempt didn't work
 
 **Bot not responding:**
 - Check that the bot token is correct

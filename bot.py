@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Set, Tuple
 import schedule
 from telegram import Update, Bot, Chat, Message
-from telegram.ext import Application, CommandHandler, ContextTypes
+from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
 from telegram.error import BadRequest, Forbidden, ChatMigrated, RetryAfter
 import json
 import aiohttp
@@ -53,9 +53,11 @@ class MentionBot:
         self.application.add_handler(CommandHandler("register", self.register_command))
         self.application.add_handler(CommandHandler("status", self.status_command))
         self.application.add_handler(CommandHandler("unregister", self.unregister_command))
-        self.application.add_handler(CommandHandler("subscribe", self.subscribe_command))
-        self.application.add_handler(CommandHandler("unsubscribe", self.unsubscribe_command))
         self.application.add_handler(CommandHandler("listchats", self.list_chats_command))
+        self.application.add_handler(CommandHandler("help", self.help_command))
+
+        # Handler for forwarded messages
+        self.application.add_handler(MessageHandler(filters.FORWARDED, self.handle_forwarded_message))
 
     async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /start command"""
@@ -64,16 +66,40 @@ class MentionBot:
             f"👋 Welcome to the Mention Bot, {user.first_name}!\n\n"
             "This bot will search for your mentions in channels and groups you subscribe to "
             "and forward them to you daily.\n\n"
+            "📋 **How to use:**\n"
+            "1. **Register:** Use /register <nickname> to set up monitoring\n"
+            "2. **Add chats:** Forward me any message from channels/groups you want to monitor\n"
+            "3. **Auto-monitoring:** If you register in a group/channel, it's automatically added!\n\n"
             "📋 **Available Commands:**\n"
             "• /register <nickname> - Set up your nickname for monitoring\n"
-            "• /subscribe - Add current chat to monitoring list\n"
-            "• /unsubscribe - Remove current chat from monitoring list\n"
-            "• /listchats - Show your subscribed channels/groups\n"
+            "• /listchats - Show your monitored channels/groups\n"
             "• /status - Check your registration status\n"
+            "• /help - Show this help message\n"
             "• /unregister - Stop monitoring completely\n\n"
             "🔍 The bot searches daily at 9:00 AM for your mentions."
         )
         await update.message.reply_text(welcome_message, parse_mode='Markdown')
+
+    async def help_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /help command"""
+        help_message = (
+            "🆘 **Help - How to monitor your mentions:**\n\n"
+            "1️⃣ **Register your nickname:**\n"
+            "`/register @your_username` or `/register nickname123`\n\n"
+            "2️⃣ **Add channels/groups to monitor:**\n"
+            "• Forward me any message from the channel/group\n"
+            "• Or register directly in the group/channel (auto-added)\n\n"
+            "3️⃣ **That's it!** The bot will:\n"
+            "• Search your subscribed chats daily at 9:00 AM\n"
+            "• Forward any messages mentioning your nickname\n"
+            "• Include source information and context\n\n"
+            "📋 **Other commands:**\n"
+            "• /listchats - Show monitored channels/groups\n"
+            "• /status - Check your registration info\n"
+            "• /unregister - Stop monitoring\n\n"
+            "💡 **Pro tip:** You can forward messages from private channels too!"
+        )
+        await update.message.reply_text(help_message, parse_mode='Markdown')
 
     async def register_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /register command"""
@@ -88,8 +114,13 @@ class MentionBot:
 
         nickname = " ".join(context.args)
 
-        # Get user's current chat subscriptions
-        subscribed_chats = await self.get_user_subscriptions(user.id)
+        # Get current chat if user is registering from a group/channel
+        current_chat = update.effective_chat
+        initial_chats = set()
+
+        if current_chat and current_chat.type in ['group', 'supergroup', 'channel']:
+            initial_chats.add(current_chat.id)
+            chat_type = "channel" if current_chat.type in ['channel', 'supergroup'] else "group"
 
         self.user_data[user.id] = {
             'user_id': user.id,
@@ -98,25 +129,35 @@ class MentionBot:
             'last_name': user.last_name,
             'nickname': nickname,
             'registered_at': datetime.now().isoformat(),
-            'subscribed_chats': list(subscribed_chats)
+            'subscribed_chats': list(initial_chats)
         }
 
-        self.subscribed_chats[user.id] = subscribed_chats
+        self.subscribed_chats[user.id] = initial_chats
 
         # Save data
         self.save_data()
 
-        await update.message.reply_text(
-            f"✅ Successfully registered!\n\n"
-            f"👤 Nickname to monitor: {nickname}\n"
-            f"📊 Found {len(subscribed_chats)} subscribed channels/groups\n"
-            f"🔍 Bot will search for your mentions daily at {SEARCH_TIME_HOUR}:00 AM"
-        )
+        if initial_chats:
+            await update.message.reply_text(
+                f"✅ Successfully registered!\n\n"
+                f"👤 Nickname to monitor: {nickname}\n"
+                f"📊 Auto-added current {chat_type}: {current_chat.title}\n"
+                f"🔍 Bot will search for your mentions daily at {SEARCH_TIME_HOUR}:00 AM\n\n"
+                f"💡 Tip: Forward me messages from other channels/groups you want to monitor!"
+            )
+        else:
+            await update.message.reply_text(
+                f"✅ Successfully registered!\n\n"
+                f"👤 Nickname to monitor: {nickname}\n"
+                f"📊 No chats detected yet\n"
+                f"🔍 Bot will search for your mentions daily at {SEARCH_TIME_HOUR}:00 AM\n\n"
+                f"💡 Forward me messages from channels/groups you want to monitor!"
+            )
 
-    async def subscribe_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle /subscribe command"""
+    async def handle_forwarded_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle forwarded messages to add chats to monitoring"""
         user = update.effective_user
-        chat = update.effective_chat
+        forwarded_message = update.message.forward_origin
 
         if user.id not in self.user_data:
             await update.message.reply_text(
@@ -124,14 +165,37 @@ class MentionBot:
             )
             return
 
-        if chat.id in self.subscribed_chats.get(user.id, set()):
-            await update.message.reply_text("ℹ️ This chat is already in your subscription list.")
+        if not forwarded_message:
+            return
+
+        # Get the original chat from forwarded message
+        if hasattr(forwarded_message, 'chat'):
+            original_chat = forwarded_message.chat
+        elif hasattr(update.message, 'forward_from_chat'):
+            original_chat = update.message.forward_from_chat
+        else:
+            await update.message.reply_text(
+                "❌ Cannot detect the source chat. Please try forwarding again."
+            )
+            return
+
+        if not original_chat:
+            return
+
+        chat_id = original_chat.id
+
+        # Check if chat is already subscribed
+        if chat_id in self.subscribed_chats.get(user.id, set()):
+            chat_type = "channel" if original_chat.type in ['channel', 'supergroup'] else "group"
+            await update.message.reply_text(
+                f"ℹ️ {chat_type.title()} '{original_chat.title}' is already in your monitoring list!"
+            )
             return
 
         # Add chat to user's subscriptions
         if user.id not in self.subscribed_chats:
             self.subscribed_chats[user.id] = set()
-        self.subscribed_chats[user.id].add(chat.id)
+        self.subscribed_chats[user.id].add(chat_id)
 
         # Update user data
         self.user_data[user.id]['subscribed_chats'] = list(self.subscribed_chats[user.id])
@@ -139,36 +203,10 @@ class MentionBot:
         # Save data
         self.save_data()
 
-        chat_type = "channel" if chat.type in ['channel', 'supergroup'] else "group"
+        chat_type = "📢 Channel" if original_chat.type in ['channel', 'supergroup'] else "👥 Group"
         await update.message.reply_text(
-            f"✅ Added {chat_type} '{chat.title}' to your monitoring list!"
-        )
-
-    async def unsubscribe_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle /unsubscribe command"""
-        user = update.effective_user
-        chat = update.effective_chat
-
-        if user.id not in self.user_data:
-            await update.message.reply_text(
-                "❌ You need to register first using /register <nickname>"
-            )
-            return
-
-        if chat.id not in self.subscribed_chats.get(user.id, set()):
-            await update.message.reply_text("ℹ️ This chat is not in your subscription list.")
-            return
-
-        # Remove chat from user's subscriptions
-        self.subscribed_chats[user.id].remove(chat.id)
-        self.user_data[user.id]['subscribed_chats'] = list(self.subscribed_chats[user.id])
-
-        # Save data
-        self.save_data()
-
-        chat_type = "channel" if chat.type in ['channel', 'supergroup'] else "group"
-        await update.message.reply_text(
-            f"✅ Removed {chat_type} '{chat.title}' from your monitoring list!"
+            f"✅ {chat_type} '{original_chat.title}' added to your monitoring list!\n"
+            f"🔍 Bot will now search for your mentions in this chat daily."
         )
 
     async def list_chats_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
