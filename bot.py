@@ -90,22 +90,25 @@ class MentionBot:
             "🆘 **Help - How to monitor your mentions:**\n\n"
             "1️⃣ **Register your nickname:**\n"
             "`/register @your_username` or `/register nickname123`\n\n"
-            "2️⃣ **Add channels/groups to monitor:**\n"
-            "• **Forward a message** from the channel/group\n"
+            "2️⃣ **Add channels for monitoring:**\n"
+            "• **Forward any message** from the channel (instant analysis!)\n"
             "• **Register in the chat** - it gets auto-added\n"
             "• **Add by username:** `/addchannel @channelname`\n"
             "• **Add by chat ID:** `/addchannel -1001234567890`\n\n"
-            "3️⃣ **That's it!** The bot will:\n"
-            "• Search your monitored chats daily at 9:00 AM\n"
-            "• Forward any messages mentioning your nickname or ID\n"
-            "• Include source information and context\n\n"
+            "3️⃣ **For channels where you can't add the bot:**\n"
+            "• **Just forward messages** from those channels\n"
+            "• Bot analyzes them instantly for your mentions\n"
+            "• Each forwarded message is checked immediately\n\n"
+            "4️⃣ **Daily monitoring:**\n"
+            "• Bot searches monitored chats daily at 9:00 AM\n"
+            "• Forwards any messages mentioning your nickname or ID\n\n"
             "📋 **All commands:**\n"
             "• /register <nickname> - Set up monitoring\n"
             "• /addchannel <username/ID> - Add specific channel\n"
             "• /listchats - Show monitored channels/groups\n"
             "• /status - Check your registration info\n"
             "• /unregister - Stop monitoring\n\n"
-            "💡 **Note:** Bot can only monitor chats where it's a member!"
+            "💡 **Pro tip:** Forward messages from any channel - I'll analyze them instantly!"
         )
         await update.message.reply_text(help_message, parse_mode='Markdown')
 
@@ -124,7 +127,10 @@ class MentionBot:
                 "Please provide channel username or ID after /addchannel command.\n"
                 "Examples:\n"
                 "/addchannel @channelusername\n"
-                "/addchannel -1001234567890"
+                "/addchannel -1001234567890\n\n"
+                "💡 For channels where you can't add the bot:\n"
+                "• Forward messages from those channels\n"
+                "• Bot will analyze them and notify about mentions"
             )
             return
 
@@ -138,9 +144,26 @@ class MentionBot:
                     chat = await self.application.bot.get_chat(channel_input)
                     chat_id = chat.id
                     chat_title = chat.title
+
+                    # Check if bot is member of the channel
+                    try:
+                        bot_member = await self.application.bot.get_chat_member(chat_id, self.application.bot.id)
+                        if bot_member.status in ['left', 'kicked']:
+                            await update.message.reply_text(
+                                f"⚠️ Bot is not a member of '{channel_input}'.\n\n"
+                                f"📝 **Workaround:** Forward messages from this channel to me.\n"
+                                f"💡 I'll analyze them for your mentions and notify you!"
+                            )
+                            return
+                    except Exception:
+                        # If we can't check membership, assume we can add it
+                        pass
+
                 except Exception as e:
                     await update.message.reply_text(
-                        f"❌ Cannot find channel '{channel_input}'. Make sure the username is correct and the bot is a member of the channel."
+                        f"❌ Cannot find channel '{channel_input}'. \n\n"
+                        f"📝 **Alternative:** Forward any message from this channel to me.\n"
+                        f"💡 I'll analyze it for your mentions and monitor future forwards!"
                     )
                     return
             else:
@@ -156,7 +179,9 @@ class MentionBot:
                     return
                 except Exception as e:
                     await update.message.reply_text(
-                        f"❌ Cannot access chat. Make sure the bot is a member of the channel."
+                        f"❌ Cannot access chat {channel_input}.\n\n"
+                        f"📝 **Alternative:** Forward any message from this channel to me.\n"
+                        f"💡 I'll analyze it for your mentions and monitor future forwards!"
                     )
                     return
 
@@ -244,7 +269,7 @@ class MentionBot:
             )
 
     async def handle_forwarded_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle forwarded messages to add chats to monitoring"""
+        """Handle forwarded messages - add chats and analyze for mentions"""
         user = update.effective_user
         forwarded_message = update.message.forward_origin
 
@@ -256,6 +281,9 @@ class MentionBot:
 
         if not forwarded_message:
             return
+
+        user_info = self.user_data[user.id]
+        nickname = user_info['nickname']
 
         # Get the original chat from forwarded message
         if hasattr(forwarded_message, 'chat'):
@@ -272,31 +300,64 @@ class MentionBot:
             return
 
         chat_id = original_chat.id
+        chat_title = original_chat.title
+        message_text = update.message.text or update.message.caption or ""
 
         # Check if chat is already subscribed
-        if chat_id in self.subscribed_chats.get(user.id, set()):
-            chat_type = "channel" if original_chat.type in ['channel', 'supergroup'] else "group"
+        if chat_id not in self.subscribed_chats.get(user.id, set()):
+            # Add chat to user's subscriptions
+            if user.id not in self.subscribed_chats:
+                self.subscribed_chats[user.id] = set()
+            self.subscribed_chats[user.id].add(chat_id)
+
+            # Update user data
+            self.user_data[user.id]['subscribed_chats'] = list(self.subscribed_chats[user.id])
+
+            # Save data
+            self.save_data()
+
+            chat_type = "📢 Channel" if original_chat.type in ['channel', 'supergroup'] else "👥 Group"
             await update.message.reply_text(
-                f"ℹ️ {chat_type.title()} '{original_chat.title}' is already in your monitoring list!"
+                f"✅ {chat_type} '{chat_title}' added to your monitoring list!\n"
+                f"🔍 Bot will now search for your mentions in this chat daily."
             )
-            return
 
-        # Add chat to user's subscriptions
-        if user.id not in self.subscribed_chats:
-            self.subscribed_chats[user.id] = set()
-        self.subscribed_chats[user.id].add(chat_id)
-
-        # Update user data
-        self.user_data[user.id]['subscribed_chats'] = list(self.subscribed_chats[user.id])
-
-        # Save data
-        self.save_data()
-
-        chat_type = "📢 Channel" if original_chat.type in ['channel', 'supergroup'] else "👥 Group"
-        await update.message.reply_text(
-            f"✅ {chat_type} '{original_chat.title}' added to your monitoring list!\n"
-            f"🔍 Bot will now search for your mentions in this chat daily."
+        # Analyze the forwarded message for mentions
+        found_mentions = await self.analyze_message_for_mentions(
+            message_text, nickname, user.id, chat_id, chat_title
         )
+
+        if found_mentions:
+            await update.message.reply_text(
+                f"🎯 **Found {len(found_mentions)} mention(s) of your nickname in this message!**\n\n"
+                f"📍 **Source:** {chat_title}\n"
+                f"💬 **Message:** {message_text[:200]}{'...' if len(message_text) > 200 else ''}"
+            )
+        else:
+            await update.message.reply_text(
+                f"📝 Message from '{chat_title}' analyzed. No mentions of your nickname found.\n"
+                f"💡 Forward more messages or use /help for other options."
+            )
+
+    async def analyze_message_for_mentions(self, message_text: str, nickname: str, user_id: int, chat_id: int, chat_title: str) -> List[Dict]:
+        """Analyze message text for mentions of user's nickname or ID"""
+        found_mentions = []
+        search_keywords = self._prepare_search_keywords(nickname, user_id)
+
+        # Check if any keyword is found in the message
+        for keyword in search_keywords:
+            if keyword.lower() in message_text.lower():
+                mention = {
+                    'chat_id': chat_id,
+                    'chat_title': chat_title,
+                    'message_text': message_text,
+                    'matched_keyword': keyword,
+                    'timestamp': datetime.now()
+                }
+                found_mentions.append(mention)
+                break  # Found at least one mention
+
+        return found_mentions
 
     async def list_chats_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /listchats command"""

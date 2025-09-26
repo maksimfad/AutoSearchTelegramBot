@@ -70,26 +70,22 @@ The bot will start and begin monitoring according to your schedule.
 
 1. **Registration**: Users register with `/register <nickname>` to set up monitoring
 2. **Adding Chats**: Users can add channels/groups in several ways:
-   - Forward any message from the channel/group to the bot
-   - Register directly in the group/channel (auto-added)
-   - Use `/addchannel @username` or `/addchannel -1001234567890`
-3. **Daily Search**: The bot searches all monitored chats daily at the configured time
-4. **Message Forwarding**: Found mentions are forwarded to users with source information
+   - **Forward any message** from the channel/group (instant analysis!)
+   - **Register directly** in the group/channel (auto-added)
+   - **Use `/addchannel @username`** or `/addchannel -1001234567890`
+3. **Instant Analysis**: When you forward a message, bot immediately analyzes it for mentions
+4. **Daily Search**: The bot searches monitored chats daily at the configured time
+5. **Message Forwarding**: Found mentions are forwarded to users with source information
 
-**Important**: The bot can only monitor chats where it has been added as a member and has permission to read messages.
+**Smart Workaround**: Even if you can't add the bot to a channel, just forward messages from that channel - the bot will analyze them instantly!
 
 ## Important Notes
 
 ### Bot Permissions & Limitations
 
-**Important**: The bot **cannot** automatically access all channels you are subscribed to, because:
+**The bot works in two modes:**
 
-1. **Privacy**: Telegram doesn't allow bots to see users' subscription lists
-2. **API Limitations**: Bot API doesn't provide methods to get user's channels
-3. **Permissions**: Bot can only access chats where it's explicitly added
-
-**To monitor channels:**
-
+#### Mode 1: Full Monitoring (Bot must be added to channel)
 1. **Add the bot** to the channels/groups you want to monitor
 2. **Grant permissions** for the bot to read messages
 3. **Add the chats** using one of these methods:
@@ -97,31 +93,38 @@ The bot will start and begin monitoring according to your schedule.
    - Register directly in the chat
    - Use `/addchannel @username` or `/addchannel -1001234567890`
 
-**Note**: Bot monitors your nickname/ID only in chats where you've explicitly added it.
+#### Mode 2: Manual Analysis (No bot access needed!)
+- **Forward any message** from channels where you can't add the bot
+- **Bot analyzes instantly** for your nickname/ID mentions
+- **No channel access required** - just forward messages you want checked
+
+**Note**: For daily monitoring, the bot needs to be added to the channel. For instant analysis, just forward messages!
 
 ## Understanding Telegram Bot Limitations
 
-**This bot works differently than you might expect:**
+**This bot works in two complementary ways:**
 
-❌ **Cannot automatically monitor all your subscriptions** - Telegram doesn't allow bots to access users' channel lists for privacy reasons
+### Mode 1: Full Channel Monitoring
+❌ **Cannot automatically monitor all your subscriptions** - Privacy restrictions
+❌ **Cannot read your private channel list** - API limitations
+✅ **Can monitor chats where it's explicitly added** - Standard bot functionality
 
-❌ **Cannot read your channel list** - Bot API doesn't provide this functionality
-
-✅ **Can monitor chats where it's explicitly added** - This is the only way it works
-
-✅ **Searches for your nickname/ID in those chats** - And forwards mentions to you
+### Mode 2: Manual Message Analysis
+✅ **Can analyze any forwarded message instantly** - No channel access needed!
+✅ **Works with any channel** - Even where you can't add the bot
+✅ **Instant feedback** - No waiting for daily searches
 
 ### How to Use It Properly:
 
-1. **Choose channels you want monitored** (the ones that actually mention you)
-2. **Add the bot to those channels** as a member or admin
-3. **Tell the bot to monitor them** using forwarding, `/addchannel`, or registration
-4. **Bot searches daily** for your nickname/ID in those specific chats
+1. **For channels where you're admin:** Add bot and use full monitoring
+2. **For channels where you're not admin:** Just forward messages for instant analysis
+3. **Mix both approaches** - Use full monitoring for important channels, manual analysis for others
 
-This is actually **more efficient** because:
-- You control exactly which chats are monitored
-- No unnecessary searching through hundreds of channels
-- Bot only looks in places where you're actually mentioned
+**This is actually more flexible** because:
+- **Instant analysis** for any forwarded message
+- **No channel access required** for manual analysis
+- **Full monitoring** for channels where you have control
+- **Best of both worlds** - immediate and scheduled monitoring
 
 ### Limitations
 
@@ -171,14 +174,25 @@ The bot is designed to be extensible. Key areas for enhancement:
 **Bot not adding forwarded chats:**
 - Check that the message was actually **forwarded** (not just copied)
 - Ensure the original message is from a **channel or group**
-- Make sure the bot is a **member** of that channel/group
+- Make sure the bot is a **member** of that channel/group (for full monitoring)
 - Try forwarding again if the first attempt didn't work
 
 **Cannot add channel by username:**
 - Make sure the username is correct (e.g., @mychannel)
-- Ensure the bot is a member of that channel
+- Ensure the bot is a member of that channel (for full monitoring)
 - Try using the chat ID instead: `/addchannel -1001234567890`
 - Check that the channel is public or the bot has access
+
+**Forwarded messages not being analyzed:**
+- Make sure you've registered first with `/register <nickname>`
+- Check that the message contains your nickname or ID
+- Try forwarding the message again
+- Use `/status` to verify your registration
+
+**For channels where you can't add the bot:**
+- Forward any message from that channel for instant analysis
+- Bot will analyze it immediately for mentions
+- No need to add the bot to the channel for manual analysis
 
 **Bot not responding:**
 - Check that the bot token is correct
